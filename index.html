@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leonie Schieber</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 20px;
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(6, 50px);
+      grid-template-rows: repeat(6, 50px);
+      gap: 4px;
+      margin-bottom: 20px;
+    }
+    .tile {
+      width: 50px;
+      height: 50px;
+      background: sandybrown;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 20px;
+      cursor: pointer;
+    }
+    .empty {
+      background: beige;
+    }
+    .tile.highlight { outline: 2px solid red; }
+    #controls {
+      display: flex;
+      gap: 10px;
+    }
+    #current-treasure {
+      font-weight: bold;
+    }
+    #scores, #current-player {
+      margin-top: 10px;
+      font-size: 18px;
+    }
+    .player-change { animation: playerFlash 0.6s ease; }
+    .score-change { animation: scoreFlash 0.6s ease; display: inline-block; }
+    .treasure-change { animation: scoreFlash 0.6s ease; display: inline-block; }
+    @keyframes playerFlash {
+      0% { background-color: yellow; transform: scale(1); }
+      50% { background-color: orange; transform: scale(1.2); }
+      100% { background-color: transparent; transform: scale(1); }
+    }
+    @keyframes scoreFlash {
+      0% { background-color: yellow; transform: scale(1); }
+      50% { background-color: lime; transform: scale(1.5); }
+      100% { background-color: transparent; transform: scale(1); }
+    }
+    @media (max-width: 600px) {
+      #board {
+        width: 100%;
+        grid-template-columns: repeat(6, 1fr);
+        grid-template-rows: repeat(6, 1fr);
+        gap: 4px;
+      }
+      .tile {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        font-size: 5vw;
+      }
+      #connection, #connected-msg, #scores, #current-player, #controls {
+        width: 100%;
+        box-sizing: border-box;
+        text-align: center;
+        padding: 0 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Leonie Schieber</h1>
+  <!-- PeerJS UI -->
+  <div id="connection">Mein ID: <span id="my-id"></span> &nbsp; Verbinde mit: <input id="other-id" size="5" /> <button id="connect-btn">Verbinden</button></div>
+  <div id="connected-msg" style="display:none; margin-top:10px;">Verbunden, du bist Player <span id="connected-player-num"></span></div>
+  <div id="current-treasure">Gesuchter Schatz: <span id="treasure-name"></span></div>
+  <div id="board"></div>
+  <div id="controls">
+    <button onclick="newGame()">Neues Spiel</button>
+  </div>
+  <div id="scores">Spieler 1: <span id="score1">0</span> | Spieler 2: <span id="score2">0</span></div>
+  <div id="current-player">Aktueller Spieler: <span id="player-name">1</span></div>
+
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <script>
+    // PeerJS multiplayer setup
+    const myid = Math.floor(10000 + Math.random() * 90000);
+    document.getElementById('my-id').textContent = myid;
+    const peer = new Peer(`leonie-schieber-${myid}`);
+    let conn, playerNumber;
+    function showConnected() {
+      document.getElementById('connection').style.display = 'none';
+      const msg = document.getElementById('connected-msg');
+      document.getElementById('connected-player-num').textContent = playerNumber;
+      msg.style.display = 'block';
+    }
+
+    peer.on('connection', c => {
+      conn = c; playerNumber = 1;
+      conn.on('data', data => handleData(data));
+      conn.on('open', () => { sendInit(); showConnected(); });
+    });
+    document.getElementById('connect-btn').onclick = () => {
+      const other = document.getElementById('other-id').value;
+      conn = peer.connect(`leonie-schieber-${other}`);
+      playerNumber = 2;
+      conn.on('data', data => handleData(data));
+      conn.on('open', () => showConnected());
+    };
+
+   function sendInit() {
+     if (conn) {
+       // encode treasures by index to avoid emoji in data
+       const mapIdx = treasureMap.map(t => treasures.indexOf(t));
+       const ctIdx = treasures.indexOf(currentTreasure);
+       conn.send({type:'init', state:{treasureMapIdx: mapIdx, emptyIndex, currentTreasureIdx: ctIdx, playerScores:[...playerScores], currentPlayer}});
+     }
+   }
+   function handleData(data) {
+     if (data.type === 'init' && data.state) {
+      const s = data.state;
+      // reconstruct treasureMap from indices
+      if (Array.isArray(s.treasureMapIdx)) {
+        treasureMap = s.treasureMapIdx.map(i => i >= 0 ? treasures[i] : "");
+      }
+      emptyIndex = s.emptyIndex != null ? s.emptyIndex : emptyIndex;
+      // set current treasure from index
+      if (typeof s.currentTreasureIdx === 'number' && treasures[s.currentTreasureIdx]) {
+        currentTreasure = treasures[s.currentTreasureIdx];
+      }
+      playerScores = Array.isArray(s.playerScores) ? s.playerScores : playerScores;
+      currentPlayer = s.currentPlayer != null ? s.currentPlayer : currentPlayer;
+      updateBoard(); updateScores(); updateCurrentPlayer(); updateHighlights();
+      document.getElementById('treasure-name').textContent = currentTreasure;
+    } else if (data.type === 'move') {
+      remoteSlide(data.index);
+    } else if (data.type === 'update' && data.state) {
+      // apply broadcasted game state
+      const s = data.state;
+      currentTreasure = treasures[s.currentTreasureIdx];
+      playerScores = Array.isArray(s.playerScores) ? s.playerScores : playerScores;
+      currentPlayer = s.currentPlayer;
+      updateScores(); updateCurrentPlayer(); updateHighlights();
+      document.getElementById('treasure-name').textContent = currentTreasure;
+    } else if (data.type === 'score') {
+      // removed score-only handling
+    }
+   }
+
+    const boardSize = 6;
+    const totalTiles = boardSize * boardSize;
+    const treasures = ["💎", "🪙", "🔮", "⚱️", "📿", "🗿", "👑", "🏺", "🗡️"];
+    let board = [];
+    let treasureMap = [];
+    let emptyIndex = 0;
+    let currentTreasure = "";
+    let playerScores = [0, 0];
+    let currentPlayer = 0;
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function updateHighlights() {
+      // hide highlights if remote and not your turn
+      if (conn && playerNumber !== currentPlayer+1) {
+        board.forEach(t => t.classList.remove('highlight'));
+        return;
+      }
+      board.forEach((tile, i) => {
+        const rowE = Math.floor(emptyIndex/boardSize), colE = emptyIndex%boardSize;
+        const rowI = Math.floor(i/boardSize), colI = i%boardSize;
+        if ((rowI===rowE && Math.abs(colI-colE)===1) ||
+            (colI===colE && Math.abs(rowI-rowE)===1)) {
+          tile.classList.add('highlight');
+        } else tile.classList.remove('highlight');
+      });
+    }
+
+    // Sync board DOM with current state
+    function updateBoard() {
+      board.forEach((tile, i) => {
+        tile.classList.toggle('empty', i === emptyIndex);
+        tile.innerHTML = '';
+      });
+    }
+
+    function newGame() {
+      // Reset board
+      const boardEl = document.getElementById("board");
+      boardEl.innerHTML = "";
+
+      // Setup treasure map: one treasure per 2x2 block
+      treasureMap = new Array(totalTiles).fill("");
+      let shuffledTreasures = shuffle([...treasures]);
+      let tIdx = 0;
+      for (let br = 0; br < boardSize; br += 2) {
+        for (let bc = 0; bc < boardSize; bc += 2) {
+          const base = br * boardSize + bc;
+          // exclude top-left (0) so no treasure there
+          const block = [base, base + 1, base + boardSize, base + boardSize + 1].filter(i => i !== 0);
+          const pos = block[Math.floor(Math.random() * block.length)];
+          treasureMap[pos] = shuffledTreasures[tIdx++];
+        }
+      }
+
+      // Build tiles
+      board = [];
+      for (let i = 0; i < totalTiles; i++) {
+        const tile = document.createElement("div");
+        tile.classList.add("tile");
+        tile.dataset.index = i;
+        tile.onclick = () => tryReveal(i);
+        tile.innerHTML = "";
+        board.push(tile);
+        boardEl.appendChild(tile);
+      }
+
+      // Place empty tile always at top-left
+      emptyIndex = 0;
+      board[emptyIndex].classList.add("empty");
+      board[emptyIndex].innerHTML = "";
+      treasureMap[emptyIndex] = "";
+
+      // Reset scores and current player
+      playerScores = [0, 0];
+      currentPlayer = 0;
+      updateScores();
+      updateCurrentPlayer();
+
+      updateHighlights();
+      nextTreasure();
+     sendInit();
+    }
+
+    function nextTreasure() {
+      const options = treasures.filter(t => t !== currentTreasure);
+      currentTreasure = options[Math.floor(Math.random() * options.length)];
+      document.getElementById("treasure-name").textContent = currentTreasure;
+      const tn = document.getElementById('treasure-name');
+      tn.classList.add('treasure-change');
+      tn.addEventListener('animationend', () => tn.classList.remove('treasure-change'), { once: true });
+    }
+
+    function tryReveal(index) {
+     // block if connected and not your turn
+     if (conn && playerNumber !== currentPlayer+1) return;
+      const rowEmpty = Math.floor(emptyIndex / boardSize);
+      const colEmpty = emptyIndex % boardSize;
+      const rowClicked = Math.floor(index / boardSize);
+      const colClicked = index % boardSize;
+
+      // Only allow sliding an adjacent tile
+      if ((rowClicked === rowEmpty && Math.abs(colClicked - colEmpty) === 1) ||
+          (colClicked === colEmpty && Math.abs(rowClicked - rowEmpty) === 1)) {
+        if (conn) conn.send({type:'move', index});
+        slideTiles(index);
+      }
+    }
+
+    function slideTiles(index) {
+      // instant swap empty and clicked
+      board[emptyIndex].classList.remove('empty');
+      board[index].classList.add('empty');
+      emptyIndex = index;
+      board.forEach(t => t.innerHTML = '');
+      updateHighlights();
+      checkTreasure(index);
+    }
+    // slide without checking treasure or sending, for remote peers
+    function remoteSlide(index) {
+      board[emptyIndex].classList.remove('empty');
+      board[index].classList.add('empty');
+      emptyIndex = index;
+      board.forEach(t => t.innerHTML = '');
+      // reveal tile
+      if (treasureMap[index] !== '') board[index].innerHTML = treasureMap[index];
+      checkTreasure(index);
+    }
+
+    function updateScores() {
+      document.getElementById("score1").textContent = playerScores[0];
+      document.getElementById("score2").textContent = playerScores[1];
+    }
+
+    function updateCurrentPlayer() {
+      document.getElementById("player-name").textContent = currentPlayer + 1;
+      const el = document.getElementById('current-player');
+      el.classList.add('player-change');
+      el.addEventListener('animationend', () => el.classList.remove('player-change'), { once: true });
+    }
+
+    // replace checkTreasure
+    function checkTreasure(index) {
+      if (treasureMap[index] === "") return;
+      board[index].innerHTML = treasureMap[index];
+      if (treasureMap[index] === currentTreasure) {
+        playerScores[currentPlayer]++;
+        updateScores();
+        const scoreEl = document.getElementById(`score${currentPlayer+1}`);
+        scoreEl.classList.add('score-change');
+        scoreEl.addEventListener('animationend', () => scoreEl.classList.remove('score-change'), { once: true });
+        if (conn) {
+          if (playerNumber === 1) {
+            nextTreasure();
+            conn.send({type: 'update', state: {currentTreasureIdx: treasures.indexOf(currentTreasure), playerScores: [...playerScores], currentPlayer}});
+          }
+        } else {
+          nextTreasure();
+        }
+        // handle new treasure selection and sync
+      } else {
+        currentPlayer = 1 - currentPlayer;
+        updateCurrentPlayer();
+        updateHighlights();
+        // send update on wrong guess for both players
+        // if (conn) conn.send({type:'update', state:{currentTreasureIdx: treasures.indexOf(currentTreasure), playerScores:[...playerScores], currentPlayer}});
+      }
+    }
+
+    newGame();
+    // allow arrow keys to slide tiles
+    document.addEventListener('keydown', e => {
+      // block if connected and not your turn
+      if (conn && playerNumber !== currentPlayer+1) return;
+      let target;
+      const rowE = Math.floor(emptyIndex/boardSize), colE = emptyIndex%boardSize;
+      switch (e.key) {
+        case 'ArrowUp': if (rowE > 0) target = emptyIndex - boardSize; break;
+        case 'ArrowDown': if (rowE < boardSize-1) target = emptyIndex + boardSize; break;
+        case 'ArrowLeft': if (colE > 0) target = emptyIndex - 1; break;
+        case 'ArrowRight': if (colE < boardSize-1) target = emptyIndex + 1; break;
+      }
+      if (target !== undefined) {
+        if (conn) conn.send({type:'move', index: target});
+        slideTiles(target);
+        e.preventDefault();
+      }
+    });
+  </script>
+</body>
+</html>
