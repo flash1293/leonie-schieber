@@ -81,7 +81,7 @@
 <body>
   <h1>Leonie Schieber</h1>
   <!-- PeerJS UI -->
-  <div id="connection">Mein ID: <span id="my-id"></span> &nbsp; Verbinde mit: <input id="other-id" size="5" /> <button id="connect-btn">Verbinden</button></div>
+  <div id="connection">Mein ID: <span id="my-id"></span> &nbsp; Verbinde mit: <input id="other-id" size="3" maxlength="3" /> <button id="connect-btn">Verbinden</button></div>
   <div id="connected-msg" style="display:none; margin-top:10px;">Verbunden, du bist Player <span id="connected-player-num"></span></div>
   <div id="current-treasure">Gesuchter Schatz: <span id="treasure-name"></span></div>
   <div id="board"></div>
@@ -94,7 +94,7 @@
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <script>
     // PeerJS multiplayer setup
-    const myid = Math.floor(10000 + Math.random() * 90000);
+    const myid = Math.floor(100 + Math.random() * 900);
     document.getElementById('my-id').textContent = myid;
     const peer = new Peer(`leonie-schieber-${myid}`);
     let conn, playerNumber;
