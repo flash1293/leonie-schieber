@@ -22,7 +22,7 @@
     .tile {
       width: 50px;
       height: 50px;
-      background: sandybrown;
+      background: url('tile_background.jpeg') center center / cover;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -128,20 +128,20 @@
    }
    function handleData(data) {
      if (data.type === 'init' && data.state) {
-      const s = data.state;
-      // reconstruct treasureMap from indices
-      if (Array.isArray(s.treasureMapIdx)) {
-        treasureMap = s.treasureMapIdx.map(i => i >= 0 ? treasures[i] : "");
-      }
-      emptyIndex = s.emptyIndex != null ? s.emptyIndex : emptyIndex;
-      // set current treasure from index
-      if (typeof s.currentTreasureIdx === 'number' && treasures[s.currentTreasureIdx]) {
-        currentTreasure = treasures[s.currentTreasureIdx];
-      }
-      playerScores = Array.isArray(s.playerScores) ? s.playerScores : playerScores;
-      currentPlayer = s.currentPlayer != null ? s.currentPlayer : currentPlayer;
-      updateBoard(); updateScores(); updateCurrentPlayer(); updateHighlights();
-      document.getElementById('treasure-name').textContent = currentTreasure;
+     const s = data.state;
+     // reconstruct treasureMap from indices
+     if (Array.isArray(s.treasureMapIdx)) {
+       treasureMap = s.treasureMapIdx.map(i => i >= 0 ? treasures[i] : "");
+     }
+     emptyIndex = s.emptyIndex != null ? s.emptyIndex : emptyIndex;
+     // set current treasure from index
+     if (typeof s.currentTreasureIdx === 'number' && treasures[s.currentTreasureIdx]) {
+       currentTreasure = treasures[s.currentTreasureIdx];
+     }
+     playerScores = Array.isArray(s.playerScores) ? s.playerScores : playerScores;
+     currentPlayer = s.currentPlayer != null ? s.currentPlayer : currentPlayer;
+     updateBoard(); updateScores(); updateCurrentPlayer(); updateHighlights();
+     document.getElementById('treasure-name').innerHTML = `<img src="${currentTreasure}" style="width:32px;height:32px;" />`;
     } else if (data.type === 'move') {
       remoteSlide(data.index);
     } else if (data.type === 'update' && data.state) {
@@ -151,7 +151,7 @@
       playerScores = Array.isArray(s.playerScores) ? s.playerScores : playerScores;
       currentPlayer = s.currentPlayer;
       updateScores(); updateCurrentPlayer(); updateHighlights();
-      document.getElementById('treasure-name').textContent = currentTreasure;
+      document.getElementById('treasure-name').innerHTML = `<img src="${currentTreasure}" style="width:32px;height:32px;" />`;
     } else if (data.type === 'score') {
       // removed score-only handling
     }
@@ -159,7 +159,7 @@
 
     const boardSize = 6;
     const totalTiles = boardSize * boardSize;
-    const treasures = ["💎", "🪙", "🔮", "⚱️", "📿", "🗿", "👑", "🏺", "🗡️"];
+    const treasures = ["treasure_0.png","treasure_1.png","treasure_2.png","treasure_3.png","treasure_4.png","treasure_5.png","treasure_6.png","treasure_7.png","treasure_8.png"];
     let board = [];
     let treasureMap = [];
     let emptyIndex = 0;
@@ -250,7 +250,7 @@
     function nextTreasure() {
       const options = treasures.filter(t => t !== currentTreasure);
       currentTreasure = options[Math.floor(Math.random() * options.length)];
-      document.getElementById("treasure-name").textContent = currentTreasure;
+      document.getElementById("treasure-name").innerHTML = `<img src="${currentTreasure}" style="width:32px;height:32px;" />`;
       const tn = document.getElementById('treasure-name');
       tn.classList.add('treasure-change');
       tn.addEventListener('animationend', () => tn.classList.remove('treasure-change'), { once: true });
@@ -288,7 +288,7 @@
       emptyIndex = index;
       board.forEach(t => t.innerHTML = '');
       // reveal tile
-      if (treasureMap[index] !== '') board[index].innerHTML = treasureMap[index];
+      if (treasureMap[index] !== '') board[index].innerHTML = `<img src="${treasureMap[index]}" style="width:90%;height:90%;" />`;
       checkTreasure(index);
     }
 
@@ -307,7 +307,7 @@
     // replace checkTreasure
     function checkTreasure(index) {
       if (treasureMap[index] === "") return;
-      board[index].innerHTML = treasureMap[index];
+      board[index].innerHTML = `<img src="${treasureMap[index]}" style="width:90%;height:90%;" />`;
       if (treasureMap[index] === currentTreasure) {
         playerScores[currentPlayer]++;
         updateScores();
@@ -327,8 +327,6 @@
         currentPlayer = 1 - currentPlayer;
         updateCurrentPlayer();
         updateHighlights();
-        // send update on wrong guess for both players
-        // if (conn) conn.send({type:'update', state:{currentTreasureIdx: treasures.indexOf(currentTreasure), playerScores:[...playerScores], currentPlayer}});
       }
     }
 
