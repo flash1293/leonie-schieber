@@ -82,7 +82,7 @@
   <h1>Leonie Schieber</h1>
   <!-- PeerJS UI -->
   <div id="connection">Mein ID: <span id="my-id"></span> &nbsp; Verbinde mit: <input id="other-id" size="3" maxlength="3" /> <button id="connect-btn">Verbinden</button></div>
-  <div id="connected-msg" style="display:none; margin-top:10px;">Verbunden, du bist Player <span id="connected-player-num"></span></div>
+  <div id="connected-msg" style="display:none; margin-top:10px;">Verbunden, du bist Spieler <span id="connected-player-num"></span></div>
   <div id="current-treasure">Gesuchter Schatz: <span id="treasure-name"></span></div>
   <div id="board"></div>
   <div id="controls">
@@ -184,8 +184,9 @@
       board.forEach((tile, i) => {
         const rowE = Math.floor(emptyIndex/boardSize), colE = emptyIndex%boardSize;
         const rowI = Math.floor(i/boardSize), colI = i%boardSize;
-        if ((rowI===rowE && Math.abs(colI-colE)===1) ||
-            (colI===colE && Math.abs(rowI-rowE)===1)) {
+        const dCol = Math.abs(colI - colE), dRow = Math.abs(rowI - rowE);
+        if ((rowI === rowE && (dCol === 1 || dCol === 2)) ||
+            (colI === colE && (dRow === 1 || dRow === 2))) {
           tile.classList.add('highlight');
         } else tile.classList.remove('highlight');
       });
@@ -259,17 +260,15 @@
     function tryReveal(index) {
      // block if connected and not your turn
      if (conn && playerNumber !== currentPlayer+1) return;
-      const rowEmpty = Math.floor(emptyIndex / boardSize);
-      const colEmpty = emptyIndex % boardSize;
-      const rowClicked = Math.floor(index / boardSize);
-      const colClicked = index % boardSize;
-
-      // Only allow sliding an adjacent tile
-      if ((rowClicked === rowEmpty && Math.abs(colClicked - colEmpty) === 1) ||
-          (colClicked === colEmpty && Math.abs(rowClicked - rowEmpty) === 1)) {
-        if (conn) conn.send({type:'move', index});
-        slideTiles(index);
-      }
+     const rowEmpty = Math.floor(emptyIndex / boardSize), colEmpty = emptyIndex % boardSize;
+     const rowClicked = Math.floor(index / boardSize), colClicked = index % boardSize;
+    // Allow sliding if in same row/col at distance 1 or 2
+     const dCol = Math.abs(colClicked - colEmpty), dRow = Math.abs(rowClicked - rowEmpty);
+     if ((rowClicked === rowEmpty && (dCol === 1 || dCol === 2)) ||
+         (colClicked === colEmpty && (dRow === 1 || dRow === 2))) {
+       if (conn) conn.send({type:'move', index});
+       slideTiles(index);
+     }
     }
 
     function slideTiles(index) {
