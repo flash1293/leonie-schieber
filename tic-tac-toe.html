@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tic-Tac-Toe</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 20px;
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      grid-template-rows: repeat(3, 100px);
+      gap: 5px;
+      margin-bottom: 20px;
+    }
+    .tile {
+      width: 100px;
+      height: 100px;
+      background-color: beige;
+      border: 1px solid #ccc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 48px;
+      cursor: pointer;
+    }
+    .tile.X {
+      background: url('tile_background.jpeg') center center / cover;
+    }
+    .tile.O {
+      background: url('treasure_2.png') center center / cover;
+    }
+    #controls {
+      display: flex;
+      gap: 10px;
+    }
+    #game-status {
+      margin-top: 10px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    @media (max-width: 600px) {
+      #board {
+        width: 90vw;
+        height: 90vw;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+      }
+      .tile {
+        width: 100%;
+        height: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Tic-Tac-Toe</h1>
+  <!-- PeerJS UI -->
+  <div id="connection">Mein ID: <span id="my-id"></span> &nbsp; Verbinde mit: <input id="other-id" size="3" maxlength="3" /> <button id="connect-btn">Verbinden</button></div>
+  <div id="connected-msg" style="display:none; margin-top:10px;">Verbunden, du bist Spieler <span id="connected-player-num"></span>. Du bist <span id="player-symbol"></span>.</div>
+  <div id="board"></div>
+  <div id="controls">
+    <button onclick="newGame()">Neues Spiel</button>
+  </div>
+  <div id="game-status"></div>
+
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <script>
+    // PeerJS multiplayer setup
+    const myid = Math.floor(100 + Math.random() * 900);
+    document.getElementById('my-id').textContent = myid;
+    const peer = new Peer(`leonie-schieber-ttt-${myid}`);
+    let conn, playerNumber, playerSymbol;
+    const statusEl = document.getElementById('game-status');
+
+    function showConnected() {
+      document.getElementById('connection').style.display = 'none';
+      const msg = document.getElementById('connected-msg');
+      document.getElementById('connected-player-num').textContent = playerNumber;
+      document.getElementById('player-symbol').textContent = playerSymbol;
+      msg.style.display = 'block';
+    }
+
+    peer.on('connection', c => {
+      conn = c;
+      playerNumber = 1;
+      playerSymbol = 'X';
+      conn.on('data', data => handleData(data));
+      conn.on('open', () => {
+        showConnected();
+        newGame(); // Player 1 starts and syncs the new game
+      });
+    });
+
+    document.getElementById('connect-btn').onclick = () => {
+      const other = document.getElementById('other-id').value;
+      conn = peer.connect(`leonie-schieber-ttt-${other}`);
+      playerNumber = 2;
+      playerSymbol = 'O';
+      conn.on('data', data => handleData(data));
+      conn.on('open', () => showConnected());
+    };
+
+    function sendState(state) {
+      if (conn) {
+        conn.send({ type: 'state', state });
+      }
+    }
+
+    function handleData(data) {
+      if (data.type === 'state' && data.state) {
+        boardState = data.state.boardState;
+        currentPlayer = data.state.currentPlayer;
+        gameOver = data.state.gameOver;
+        updateBoard();
+        updateStatus();
+      } else if (data.type === 'move' && data.index !== undefined) {
+        makeMove(data.index, false);
+      }
+    }
+
+    const boardSize = 3;
+    const totalTiles = boardSize * boardSize;
+    let board = [];
+    let boardState = []; // 'X', 'O', or ''
+    let currentPlayer = 'X';
+    let gameOver = false;
+
+    function newGame() {
+      boardState = Array(totalTiles).fill('');
+      currentPlayer = 'X';
+      gameOver = false;
+      updateBoard();
+      updateStatus();
+      if (conn && playerNumber === 1) {
+        sendState({ boardState, currentPlayer, gameOver });
+      }
+    }
+
+    function updateBoard() {
+      const boardEl = document.getElementById("board");
+      boardEl.innerHTML = "";
+      board = [];
+      for (let i = 0; i < totalTiles; i++) {
+        const tile = document.createElement("div");
+        tile.classList.add("tile");
+        if (boardState[i]) {
+          tile.classList.add(boardState[i]);
+        }
+        tile.dataset.index = i;
+        tile.onclick = () => handleTileClick(i);
+        board.push(tile);
+        boardEl.appendChild(tile);
+      }
+    }
+
+    function updateStatus() {
+      if (gameOver) {
+        const winner = checkWinner();
+        if (winner) {
+          statusEl.textContent = `Spieler ${winner} hat gewonnen!`;
+        } else {
+          statusEl.textContent = 'Unentschieden!';
+        }
+      } else {
+        statusEl.textContent = `Spieler ${currentPlayer} ist am Zug.`;
+      }
+    }
+
+    function handleTileClick(index) {
+      if (gameOver || boardState[index] !== '' || (conn && playerSymbol !== currentPlayer)) {
+        return;
+      }
+      makeMove(index, true);
+    }
+
+    function makeMove(index, isLocal) {
+      if (gameOver || boardState[index] !== '') return;
+
+      boardState[index] = currentPlayer;
+      updateBoard();
+
+      if (isLocal && conn) {
+        conn.send({ type: 'move', index });
+      }
+
+      const winner = checkWinner();
+      if (winner) {
+        gameOver = true;
+        updateStatus();
+        if (isLocal && conn) sendState({ boardState, currentPlayer, gameOver });
+        return;
+      }
+
+      if (boardState.every(cell => cell !== '')) {
+        gameOver = true;
+        updateStatus();
+        if (isLocal && conn) sendState({ boardState, currentPlayer, gameOver });
+        return;
+      }
+
+      currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+      updateStatus();
+      if (isLocal && conn) sendState({ boardState, currentPlayer, gameOver });
+    }
+
+    function checkWinner() {
+      const lines = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
+        [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
+        [0, 4, 8], [2, 4, 6]  // diagonals
+      ];
+      for (const line of lines) {
+        const [a, b, c] = line;
+        if (boardState[a] && boardState[a] === boardState[b] && boardState[a] === boardState[c]) {
+          return boardState[a];
+        }
+      }
+      return null;
+    }
+
+    // Initial setup
+    newGame();
+  </script>
+</body>
+</html>
